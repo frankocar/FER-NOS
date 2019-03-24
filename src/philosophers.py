@@ -4,8 +4,8 @@ import random
 import enum
 import os
 
-detail_output = True
-long_sleep = True
+detail_output = False
+long_sleep = False
 philosopher_number = 5
 
 # Shared array between processes
@@ -143,16 +143,17 @@ class Philosopher(Process):
             if len(self.q) == 0:
                 continue
 
-            head = self.q[0]
-            if head.id == self.id and responses >= (philosopher_number - 1):
+            if self.q[0].id == self.id and responses >= (philosopher_number - 1):
                 self.q.pop(0)
                 time.sleep(1 if long_sleep else 0.1)
+
                 if not self.chopsticks:
                     if self.acquire_chopsticks():
                         print(f"\033[0;32;0mPhilosopher {self.id} sits\033[0;0;0m")
                 else:
                     if self.release_chopsticks():
                         print(f"\033[0;31;0mPhilosopher {self.id} leaves\033[0;0;0m")
+
                 responses = 0
                 wait = False
                 self.send_messages(Message(self.id, init_time, MessageType.exit))
