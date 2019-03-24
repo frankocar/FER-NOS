@@ -137,14 +137,6 @@ class Philosopher(Process):
 
                     # If the message is an exit notification, remove the original request from message queue
                     elif recv.type == MessageType.exit:
-                        # aye = None
-                        # for i, m in enumerate(self.q):
-                        #     if m.id == recv.id and m.type == MessageType.request:
-                        #         aye = i
-                        # if aye is not None:
-                        #     self.q.pop(aye)
-                        # else:
-                        #     print("Error - request not found")
                         self.q = list(filter(lambda x: x.id != recv.id or x.type != MessageType.request, self.q))
                         dprint(f"Philosopher {self.id} removed a message from {recv.id}")
 
