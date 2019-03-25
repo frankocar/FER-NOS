@@ -36,7 +36,7 @@ def main():
         smoker_type = int(msg[-1])
         worker_queue.send(message="", type=smoker_type)
         recv_type = int(merchant_queue.receive(type=4)[0].decode('utf-8'))
-        print(f"    Smoker with {items[recv_type - 1]}: 🚬")
+        print(f"    Smoker with {items[recv_type - 1]}: smokes")
 
     # for w in workers:
     #     w.join()
