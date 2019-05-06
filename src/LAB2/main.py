@@ -208,6 +208,14 @@ class FilePathValidator(Validator):
                 cursor_position=len(value.text))
 
 
+def padText(text, bytes):
+    return text + (bytes - len(text) % bytes) * chr(bytes - len(text) % bytes)
+
+
+def unpad(text):
+    return text[:-ord(text[len(text)-1:])]
+
+
 def createEnvelope():
     data = prompt([
         {
@@ -278,13 +286,15 @@ def createEnvelope():
 
     if data['method'] == "AES":
         if data['crypto_mode'] != 3 and len(inputFile) % 16 != 0:
-            inputFile += ''.join(' ' for _ in range(16 - (len(inputFile) % 16)))
+            # inputFile += ''.join(' ' for _ in range(16 - (len(inputFile) % 16)))
+            inputFile = padText(inputFile, 16)
         iv = Random.new().read(AES.block_size)
         aes = AES.new(key, data['crypto_mode'], iv)
         msgEnc = aes.encrypt(inputFile.encode())
     else:
         if data['crypto_mode'] != 3 and len(inputFile) % 8 != 0:
-            inputFile += ''.join(' ' for _ in range(8 - (len(inputFile) % 8)))
+            # inputFile += ''.join(' ' for _ in range(8 - (len(inputFile) % 8)))
+            inputFile = padText(inputFile, 8)
         iv = Random.new().read(DES3.block_size)
         des3 = DES3.new(key, data['crypto_mode'], iv)
         msgEnc = des3.encrypt(inputFile.encode())
@@ -402,13 +412,18 @@ def openEnvelope():
         des3 = DES3.new(bytes.fromhex(f'{key[0]:x}'), data['crypto_mode'], iv)
         msg = des3.decrypt(env.getEnvelopeData())
 
-    print(msg.decode())
+    msg = msg.decode()
+
+    if data['crypto_mode'] != modes["CFB"]:
+        msg = unpad(msg)
+
+    print(msg)
 
     if not os.path.exists(os.path.dirname(data['out_path'])):
         os.makedirs(os.path.dirname(data['out_path']))
 
     with open(data['out_path'], 'w') as f:
-        f.write(msg.decode())
+        f.write(msg)
 
 
 def openSignature():
@@ -469,6 +484,88 @@ def openSignature():
         print("INVALID file")
 
 
+def openStamp():
+    data = prompt([
+        {
+            'type': 'input',
+            'name': 'in_path',
+            'message': 'Enter digital envelope file path:',
+            'default': './testEnvelopeOut.txt',
+            'validate': FilePathValidator,
+            'filter': lambda val: val.strip()
+        },
+        {
+            'type': 'input',
+            'name': 'key_path',
+            'message': 'Enter private key file path:',
+            'default': './testPrivateKey.key',
+            'validate': FilePathValidator,
+            'filter': lambda val: val.strip()
+        },
+        {
+            'type': 'input',
+            'name': 'public_key_path',
+            'message': 'Enter public key file path:',
+            'default': './testPublicKey.key',
+            'validate': FilePathValidator,
+            'filter': lambda val: val.strip()
+        },
+        {
+            'type': 'list',
+            'name': 'crypto_mode',
+            'message': 'Encryption mode:',
+            'choices': modes.keys(),
+            'filter': lambda val: modes[val.strip()]
+        },
+        {
+            'type': 'input',
+            'name': 'sig_in_path',
+            'message': 'Enter digital signature file path:',
+            'default': './testSignatureOut.txt',
+            'validate': FilePathValidator,
+            'filter': lambda val: val.strip()
+        }
+    ], style=style)
+
+    env = FileReader(data['in_path'])
+    privateKey = FileReader(data['key_path'])
+    publicKey = FileReader(data['public_key_path'])
+
+    rsa = RSA.construct((privateKey.getModulus(), privateKey.getPrivateExponent()))
+    key = rsa.encrypt(env.getEnvelopeCryptKey(), None)
+    iv = env.getIV()
+
+    if "AES" in env.getMethod():
+        aes = AES.new(bytes.fromhex(f'{key[0]:x}'), data['crypto_mode'], iv)
+        msg = aes.decrypt(env.getEnvelopeData())
+    elif "3DES" in env.getMethod():
+        des3 = DES3.new(bytes.fromhex(f'{key[0]:x}'), data['crypto_mode'], iv)
+        msg = des3.decrypt(env.getEnvelopeData())
+
+    msg = msg.decode()
+
+    if data['crypto_mode'] != modes["CFB"]:
+        msg = unpad(msg)
+
+    print(msg)
+
+    sig = FileReader(data['sig_in_path'])
+
+    algo = hashAlgos[sig.getMethod()[0]]
+
+    digest = algo.new(bytes(msg, 'UTF-8')).hexdigest()
+    rsa = RSA.construct((publicKey.getModulus(), publicKey.getPublicExponent()))
+
+    enc = rsa.encrypt(sig.getSignature(), None)
+
+    if digest.lower() == f'{enc[0]:x}'.lower():
+        print("File is valid")
+    else:
+        print("INVALID file")
+
+
+
+
 def generateKeys():
     data = prompt([
         {
@@ -518,6 +615,7 @@ actions = {'Create digital envelope': createEnvelope,
            'Create digital signature': createSignature,
            'Open digital envelope': openEnvelope,
            'Check digital signature': openSignature,
+           'Check digital stamp': openStamp,
            'Generate RSA key pair': generateKeys}
 
 
